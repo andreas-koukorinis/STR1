@@ -1,0 +1,454 @@
+etf-kf-statarb/
+├── pyproject.toml            # poetry/pdm deps + project metadata
+├── README.md
+├── LICENSE
+├── .env.example              # API keys, data paths, credentials
+├── .env.development          # dev-specific configs (gitignored)
+├── .env.production           # prod configs (gitignored)
+├── .pre-commit-config.yaml   # black, isort, mypy, ruff, nbstripout
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml           # unit tests, type checking, coverage
+│   │   ├── backtests.yml    # nightly backtest regression suite
+│   │   └── deploy.yml       # containerize and push to registry
+│   └── CODEOWNERS
+├── Makefile                  # dev tasks, Docker builds, test runners
+├── Dockerfile               # multi-stage build for prod deployment
+├── docker-compose.yml       # local dev stack (Redis, TimescaleDB, Grafana)
+├── conf/
+│   ├── base/
+│   │   ├── config.yaml      # master config with defaults
+│   │   ├── logging.yaml     # structured logging config
+│   │   └── monitoring.yaml  # metrics, alerts thresholds
+│   ├── models/
+│   │   ├── kf.yaml          # KF params (R, Q, delta mapping)
+│   │   ├── ensemble.yaml    # horizon configs [3..20], weights
+│   │   ├── regime.yaml      # regime detection params
+│   │   └── conformal.yaml   # conformal prediction settings
+│   │       # alpha: [0.05, 0.1, 0.2]  # multiple coverage levels
+│   │       # methods: ['adaptive', 'enbpi', 'jackknife+']
+│   │       # calibration_window: 500
+│   │       # update_frequency: 20
+│   │       # volatility_scaling: true
+│   │       # regime_conditioning: true
+│   ├── strategy/
+│   │   ├── signals.yaml     # entry/exit thresholds, lookbacks
+│   │   ├── risk.yaml        # position limits, drawdown stops
+│   │   ├── allocation.yaml  # sizing rules, p=1.3 weighting
+│   │   └── uncertainty.yaml # conformal-based adjustments
+│   │       # pi_width_gate: 2.5  # max PI width multiplier
+│   │       # coverage_target: 0.9
+│   │       # adapt_thresholds: true
+│   │       # uncertainty_penalty: 0.3
+│   ├── universe/
+│   │   ├── pairs.yaml       # pair definitions (A,B,hedge_type)
+│   │   ├── sectors.yaml     # sector mappings, correlations
+│   │   └── filters.yaml     # liquidity, ADV requirements
+│   ├── execution/
+│   │   ├── costs.yaml       # fee models, slippage curves
+│   │   ├── venues.yaml      # exchange configs, routing
+│   │   └── latency.yaml     # expected delays per venue
+│   └── environments/
+│       ├── dev.yaml         # override for development
+│       ├── staging.yaml     # paper trading configs
+│       └── prod.yaml        # production overrides
+├── data/                     # (gitignored) managed by DVC
+│   ├── raw/
+│   │   ├── market/          # OHLCV, trades, quotes
+│   │   ├── reference/       # tickers, calendars, corporate actions
+│   │   └── alternative/     # flows, sentiment, macro
+│   ├── interim/
+│   │   ├── aligned/         # time-aligned bars
+│   │   ├── normalized/      # adjusted for splits/divs
+│   │   └── validated/       # quality-checked data
+│   ├── features/
+│   │   ├── technical/       # realized vol, microstructure
+│   │   ├── statistical/     # cointegration, correlation
+│   │   ├── contextual/      # regime, macro conditions
+│   │   └── uncertainty/     # conformal scores, PI widths
+│   ├── predictions/         # model outputs with intervals
+│   │   ├── point/          # point predictions
+│   │   ├── intervals/      # prediction intervals
+│   │   └── coverage/       # realized coverage stats
+│   └── cache/              # Redis dumps, checkpoints
+├── notebooks/
+│   ├── research/
+│   │   ├── 00_data_quality.ipynb
+│   │   ├── 01_pair_discovery.ipynb
+│   │   ├── 02_kf_calibration.ipynb
+│   │   ├── 03_regime_analysis.ipynb
+│   │   ├── 04_cost_analysis.ipynb
+│   │   ├── 05_conformal_calibration.ipynb
+│   │   └── 06_coverage_analysis.ipynb
+│   ├── monitoring/
+│   │   ├── 10_daily_pnl.ipynb
+│   │   ├── 11_signal_decay.ipynb
+│   │   ├── 12_regime_shifts.ipynb
+│   │   ├── 13_prediction_coverage.ipynb
+│   │   └── 14_uncertainty_dynamics.ipynb
+│   └── templates/           # notebook templates with boilerplate
+├── reports/
+│   ├── daily/              # automated daily reports
+│   ├── research/           # ad-hoc analysis outputs
+│   ├── risk/               # risk reports, stress tests
+│   ├── performance/        # backtest results, metrics
+│   └── uncertainty/        # conformal coverage reports
+│       ├── coverage_by_regime/
+│       ├── pi_width_analysis/
+│       └── calibration_diagnostics/
+├── experiments/            # MLflow/Weights&Biases tracking
+│   ├── runs/
+│   │   └── 2025-08-17-conformal-ensemble-v1/
+│   │       ├── config.yaml
+│   │       ├── metrics.json
+│   │       ├── coverage_stats.json
+│   │       ├── artifacts/
+│   │       └── logs/
+│   └── registry/           # promoted model versions
+├── src/
+│   └── etf_kf/
+│       ├── __init__.py
+│       ├── __version__.py
+│       ├── core/
+│       │   ├── config.py        # Pydantic models for all configs
+│       │   ├── types.py         # type definitions, enums
+│       │   ├── constants.py     # market constants, magic numbers
+│       │   ├── exceptions.py    # custom exceptions
+│       │   └── logging.py       # structured logger setup
+│       ├── io/
+│       │   ├── loaders/
+│       │   │   ├── base.py      # abstract loader interface
+│       │   │   ├── parquet.py   # Arrow/Parquet optimized
+│       │   │   ├── market.py    # vendor-specific adapters
+│       │   │   └── streaming.py # real-time feed handlers
+│       │   ├── writers/
+│       │   │   ├── checkpoint.py # model state persistence
+│       │   │   ├── results.py    # experiment outputs
+│       │   │   └── intervals.py  # PI storage
+│       │   └── cache/
+│       │       ├── redis.py      # Redis cache layer
+│       │       └── disk.py       # local cache fallback
+│       ├── data/
+│       │   ├── pipeline/
+│       │   │   ├── base.py       # DAG pipeline framework
+│       │   │   ├── transforms.py # data transformations
+│       │   │   └── validators.py # data quality checks
+│       │   ├── align.py          # temporal alignment
+│       │   ├── universe.py       # dynamic universe management
+│       │   └── corporate.py      # corporate action adjustments
+│       ├── features/
+│       │   ├── base.py           # feature interface
+│       │   ├── technical/
+│       │   │   ├── volatility.py # RV, GARCH, HAR-RV
+│       │   │   ├── microstructure.py # spread, depth, toxicity
+│       │   │   └── momentum.py   # various momentum measures
+│       │   ├── statistical/
+│       │   │   ├── cointegration.py # Johansen, Engle-Granger
+│       │   │   ├── correlation.py   # DCC, rolling windows
+│       │   │   └── dispersion.py    # cross-sectional metrics
+│       │   ├── macro/
+│       │   │   ├── regime.py        # regime detection
+│       │   │   └── factors.py       # macro factor exposures
+│       │   ├── flows/
+│       │   │   ├── etf.py           # creation/redemption
+│       │   │   └── options.py       # gamma, vanna flows
+│       │   └── uncertainty/         # uncertainty features
+│       │       ├── entropy.py       # prediction entropy
+│       │       ├── divergence.py    # model divergence
+│       │       └── stability.py     # prediction stability
+│       ├── models/
+│       │   ├── base.py              # model interface
+│       │   ├── kalman/
+│       │   │   ├── filter.py        # core KF implementation
+│       │   │   ├── adaptive.py      # adaptive R/Q estimation
+│       │   │   ├── robust.py        # Huber-robust KF
+│       │   │   └── smoother.py      # RTS smoother
+│       │   ├── ensemble/
+│       │   │   ├── builder.py       # ensemble construction
+│       │   │   ├── weights.py       # weight schemes (rank^p)
+│       │   │   ├── aggregator.py    # aggregation methods
+│       │   │   └── uncertainty.py   # ensemble disagreement
+│       │   ├── regime/
+│       │   │   ├── detection.py     # HMM, threshold models
+│       │   │   └── adaptation.py    # regime-conditional params
+│       │   └── conformal/
+│       │       ├── base.py          # conformal interface
+│       │       ├── methods/
+│       │       │   ├── adaptive.py  # adaptive CP
+│       │       │   ├── split.py     # split conformal
+│       │       │   ├── jackknife.py # jackknife+
+│       │       │   ├── cv_plus.py   # CV+
+│       │       │   ├── enbpi.py     # ensemble batch PI
+│       │       │   ├── cqr.py       # conformalized quantile regression
+│       │       │   └── mondrian.py  # Mondrian CP
+│       │       ├── scores/
+│       │       │   ├── nonconformity.py # nonconformity measures
+│       │       │   ├── weighted.py      # weighted scores
+│       │       │   └── conditional.py   # conditional scores
+│       │       ├── calibration/
+│       │       │   ├── online.py        # online calibration
+│       │       │   ├── batch.py         # batch calibration
+│       │       │   ├── adaptive_window.py # adaptive windows
+│       │       │   └── regime_aware.py  # regime-specific calibration
+│       │       ├── intervals/
+│       │       │   ├── symmetric.py     # symmetric intervals
+│       │       │   ├── asymmetric.py    # asymmetric intervals
+│       │       │   └── conditional.py   # feature-conditional intervals
+│       │       ├── aggregation/
+│       │       │   ├── multi_horizon.py # aggregate across horizons
+│       │       │   ├── multi_alpha.py   # multiple coverage levels
+│       │       │   └── weighted.py      # weighted aggregation
+│       │       └── diagnostics/
+│       │           ├── coverage.py      # coverage tests
+│       │           ├── efficiency.py    # efficiency metrics
+│       │           ├── conditional_coverage.py # conditional validity
+│       │           └── adaptivity.py    # adaptation quality
+│       ├── signals/
+│       │   ├── generators/
+│       │   │   ├── residual.py      # z-score computation
+│       │   │   ├── composite.py     # signal combination
+│       │   │   ├── filters.py       # signal filtering
+│       │   │   └── conformal_adjusted.py # CP-adjusted signals
+│       │   ├── processors/
+│       │   │   ├── smoothing.py     # EWMA, Kalman smoothing
+│       │   │   ├── hysteresis.py    # directional memory
+│       │   │   ├── gates.py         # binary gates, conditions
+│       │   │   └── uncertainty_gates.py # PI-width gates
+│       │   ├── thresholds/
+│       │   │   ├── adaptive.py      # rolling percentile bands
+│       │   │   ├── static.py        # fixed thresholds
+│       │   │   └── conformal.py     # CP-based thresholds
+│       │   └── uncertainty/
+│       │       ├── scaling.py       # uncertainty-based scaling
+│       │       ├── filters.py       # high-uncertainty filters
+│       │       └── aggregation.py   # uncertainty aggregation
+│       ├── risk/
+│       │   ├── metrics/
+│       │   │   ├── var.py           # Value at Risk
+│       │   │   ├── expected_shortfall.py
+│       │   │   ├── drawdown.py      # drawdown analytics
+│       │   │   └── uncertainty_risk.py # PI-based risk metrics
+│       │   ├── limits/
+│       │   │   ├── position.py      # position limits
+│       │   │   ├── exposure.py      # gross/net exposure
+│       │   │   ├── concentration.py # concentration limits
+│       │   │   └── uncertainty.py   # uncertainty-based limits
+│       │   ├── scalers/
+│       │   │   ├── volatility.py    # vol-based scaling
+│       │   │   ├── regime.py        # regime-aware scaling
+│       │   │   ├── composite.py     # multi-factor scaling
+│       │   │   └── conformal.py     # PI-width scaling
+│       │   └── hedging/
+│       │       ├── beta.py          # beta hedging
+│       │       ├── factor.py        # factor hedging
+│       │       └── uncertainty.py   # uncertainty hedging
+│       ├── selection/
+│       │   ├── ranking/
+│       │   │   ├── performance.py   # Sharpe, Sortino ranking
+│       │   │   ├── stability.py     # signal stability metrics
+│       │   │   ├── composite.py     # multi-metric ranking
+│       │   │   └── uncertainty.py   # uncertainty-aware ranking
+│       │   ├── filters/
+│       │   │   ├── quality.py       # data quality filters
+│       │   │   ├── liquidity.py     # liquidity filters
+│       │   │   ├── regime.py        # regime-based filters
+│       │   │   └── confidence.py    # confidence-based filters
+│       │   └── allocation/
+│       │       ├── equal.py         # equal weight
+│       │       ├── risk_parity.py   # risk parity
+│       │       ├── optimization.py  # mean-variance
+│       │       └── uncertainty_weighted.py # PI-weighted allocation
+│       ├── portfolio/
+│       │   ├── construction/
+│       │   │   ├── builder.py       # portfolio builder
+│       │   │   ├── rebalancer.py    # rebalancing logic
+│       │   │   ├── constraints.py   # portfolio constraints
+│       │   │   └── uncertainty_overlay.py # uncertainty overlays
+│       │   ├── optimization/
+│       │   │   ├── objectives.py    # objective functions
+│       │   │   ├── solvers.py       # cvxpy wrappers
+│       │   │   └── robust.py        # robust optimization with PIs
+│       │   └── analytics/
+│       │       ├── attribution.py   # performance attribution
+│       │       ├── characteristics.py # portfolio chars
+│       │       └── uncertainty_decomp.py # uncertainty decomposition
+│       ├── execution/
+│       │   ├── models/
+│       │   │   ├── slippage.py      # slippage models
+│       │   │   ├── impact.py        # market impact
+│       │   │   ├── costs.py         # comprehensive cost model
+│       │   │   └── uncertainty_cost.py # uncertainty-adjusted costs
+│       │   ├── routing/
+│       │   │   ├── smart_router.py  # smart order routing
+│       │   │   ├── venues.py        # venue selection
+│       │   │   └── confidence_routing.py # confidence-based routing
+│       │   ├── algos/
+│       │   │   ├── twap.py          # TWAP implementation
+│       │   │   ├── vwap.py          # VWAP implementation
+│       │   │   ├── adaptive.py      # adaptive execution
+│       │   │   └── uncertainty_aware.py # PI-aware execution
+│       │   └── simulator/
+│       │       ├── engine.py        # execution simulation
+│       │       ├── fills.py         # fill simulation
+│       │       ├── latency.py       # latency modeling
+│       │       └── uncertainty.py   # uncertainty in execution
+│       ├── backtest/
+│       │   ├── engine/
+│       │   │   ├── core.py          # main backtest engine
+│       │   │   ├── event_loop.py    # event processing
+│       │   │   ├── state.py         # state management
+│       │   │   └── conformal_state.py # CP state tracking
+│       │   ├── components/
+│       │   │   ├── data_handler.py  # data feed management
+│       │   │   ├── strategy.py      # strategy wrapper
+│       │   │   ├── broker.py        # simulated broker
+│       │   │   └── uncertainty_tracker.py # track PI evolution
+│       │   ├── metrics/
+│       │   │   ├── performance.py   # return metrics
+│       │   │   ├── risk.py          # risk metrics
+│       │   │   ├── execution.py     # execution metrics
+│       │   │   └── coverage.py      # conformal coverage metrics
+│       │   └── analysis/
+│       │       ├── ablations.py     # ablation studies
+│       │       ├── sensitivity.py   # param sensitivity
+│       │       ├── walkforward.py   # walk-forward analysis
+│       │       └── conformal_analysis.py # CP-specific analysis
+│       ├── live/
+│       │   ├── trading/
+│       │   │   ├── engine.py        # live trading engine
+│       │   │   ├── positions.py     # position management
+│       │   │   ├── orders.py        # order management
+│       │   │   └── uncertainty_monitor.py # real-time PI monitoring
+│       │   ├── monitoring/
+│       │   │   ├── health.py        # system health checks
+│       │   │   ├── alerts.py        # alert management
+│       │   │   ├── dashboard.py     # monitoring dashboard
+│       │   │   └── coverage_monitor.py # coverage monitoring
+│       │   └── reconciliation/
+│       │       ├── positions.py     # position reconciliation
+│       │       ├── pnl.py           # P&L reconciliation
+│       │       └── predictions.py   # prediction reconciliation
+│       ├── eval/
+│       │   ├── visualization/
+│       │   │   ├── plots.py         # plotting functions
+│       │   │   ├── dashboards.py    # interactive dashboards
+│       │   │   ├── reports.py       # report generation
+│       │   │   └── uncertainty_viz.py # PI visualization
+│       │   ├── statistics/
+│       │   │   ├── tests.py         # statistical tests
+│       │   │   ├── diagnostics.py   # model diagnostics
+│       │   │   └── coverage_tests.py # conformal validity tests
+│       │   └── conformal/
+│       │       ├── coverage_analysis.py # coverage analysis
+│       │       ├── efficiency.py    # PI efficiency metrics
+│       │       └── conditional_validity.py # conditional coverage
+│       ├── api/
+│       │   ├── rest/
+│       │   │   ├── app.py           # FastAPI application
+│       │   │   ├── routes/          # API routes
+│       │   │   │   ├── predictions.py # prediction endpoints
+│       │   │   │   ├── intervals.py  # PI endpoints
+│       │   │   │   └── coverage.py   # coverage stats endpoints
+│       │   │   └── models/          # request/response models
+│       │   └── websocket/
+│       │       ├── stream.py        # WebSocket streaming
+│       │       └── uncertainty_stream.py # PI streaming
+│       └── cli/
+│           ├── main.py              # main CLI entry point
+│           ├── commands/
+│           │   ├── backtest.py      # backtest command
+│           │   ├── optimize.py      # optimization command
+│           │   ├── live.py          # live trading command
+│           │   ├── data.py          # data management
+│           │   └── conformal.py     # CP calibration commands
+│           └── utils.py             # CLI utilities
+├── tests/
+│   ├── unit/
+│   │   ├── models/
+│   │   │   ├── test_kalman.py
+│   │   │   ├── test_ensemble.py
+│   │   │   └── conformal/
+│   │   │       ├── test_adaptive.py
+│   │   │       ├── test_enbpi.py
+│   │   │       ├── test_calibration.py
+│   │   │       └── test_coverage.py
+│   │   ├── features/
+│   │   ├── risk/
+│   │   └── execution/
+│   ├── integration/
+│   │   ├── test_pipeline.py
+│   │   ├── test_backtest.py
+│   │   ├── test_live_simulation.py
+│   │   └── test_conformal_pipeline.py
+│   ├── performance/
+│   │   ├── benchmarks.py
+│   │   ├── profiling.py
+│   │   └── conformal_benchmarks.py
+│   ├── statistical/
+│   │   ├── test_coverage_validity.py
+│   │   ├── test_conditional_coverage.py
+│   │   └── test_efficiency.py
+│   ├── fixtures/
+│   │   ├── data.py
+│   │   ├── models.py
+│   │   ├── configs.py
+│   │   └── conformal.py
+│   └── conftest.py
+├── scripts/
+│   ├── setup/
+│   │   ├── install_deps.sh
+│   │   ├── setup_db.sh
+│   │   └── download_data.sh
+│   ├── deployment/
+│   │   ├── deploy.sh
+│   │   ├── rollback.sh
+│   │   └── health_check.sh
+│   ├── maintenance/
+│   │   ├── cleanup_cache.py
+│   │   ├── archive_logs.py
+│   │   ├── backup_models.py
+│   │   └── recalibrate_conformal.py
+│   ├── analysis/
+│   │   ├── generate_report.py
+│   │   ├── compare_runs.py
+│   │   └── analyze_coverage.py
+│   └── research/
+│       ├── calibrate_conformal.py
+│       ├── optimize_alpha.py
+│       └── regime_specific_cp.py
+├── infrastructure/
+│   ├── terraform/              # IaC for cloud resources
+│   ├── k8s/                    # Kubernetes manifests
+│   │   ├── base/
+│   │   ├── overlays/
+│   │   └── kustomization.yaml
+│   └── monitoring/
+│       ├── prometheus/
+│       │   └── rules/
+│       │       └── conformal_alerts.yaml
+│       ├── grafana/
+│       │   └── dashboards/
+│       │       └── uncertainty_dashboard.json
+│       └── alerts/
+└── docs/
+    ├── architecture/
+    │   ├── system_design.md
+    │   ├── data_flow.md
+    │   ├── deployment.md
+    │   └── conformal_integration.md
+    ├── models/
+    │   ├── kalman_filter.md
+    │   ├── ensemble.md
+    │   ├── risk_management.md
+    │   └── conformal_prediction.md
+    ├── research/
+    │   ├── conformal_theory.md
+    │   ├── coverage_analysis.md
+    │   └── implementation_notes.md
+    ├── api/
+    │   └── openapi.json
+    └── operations/
+        ├── runbook.md
+        ├── troubleshooting.md
+        ├── monitoring.md
+        └── conformal_operations.md
