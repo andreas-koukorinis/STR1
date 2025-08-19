@@ -1,0 +1,118 @@
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes}
+
+\title{Statistical Arbitrage in Credit Markets with Kalman Filters}
+\author{Quantitative Research / Trading Desk}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section*{TL;DR}
+We exploit \textbf{relative value dislocations} between Bonds vs ETFs, ETF vs ETF, and ETF vs CDX using a \textbf{Kalman Filter}.  
+Pairs are chosen to be economically similar, tested for cointegration, filtered by mean reversion speed, and enhanced with \textbf{conformal prediction} to manage uncertainty.  
+The strategy profits from temporary flow-driven deviations while remaining DV01-neutral and sector/rating neutral.
+
+\section{Why This Works}
+\begin{itemize}
+  \item ETF creation/redemption flows push constituent bonds away from equilibrium.
+  \item CDX rolls and ETF baskets often diverge temporarily.
+  \item Bonds, ETFs, and CDX indices all reflect the same systematic credit risk, so spreads tend to mean revert.
+  \item A Kalman filter provides a \textit{time-varying hedge ratio}, adapting to liquidity regime shifts.
+  \item Conformal prediction adds robust confidence intervals for entry/exit decisions in noisy intraday markets.
+\end{itemize}
+
+\section{Methodology}
+
+\subsection{Pair Selection}
+We restrict to ``similar'' pairs:
+\begin{itemize}
+  \item Bond vs ETF (e.g., LQD constituent vs LQD).
+  \item ETF vs ETF (e.g., LQD vs HYG).
+  \item ETF vs CDX (e.g., HYG vs CDX HY).
+\end{itemize}
+Similarity is defined by sector, rating bucket, and liquidity (ADV, bid/ask).  
+
+\subsection{Cointegration}
+For assets $X_t$ and $Y_t$:
+\[
+Y_t = \alpha + \beta X_t + \varepsilon_t
+\]
+If $\varepsilon_t$ is stationary, then $(X_t, Y_t)$ are cointegrated and suitable for trading.
+
+\subsection{Kalman Filter Hedge Ratio}
+We allow a \textit{time-varying} hedge ratio:
+\[
+Y_t = \beta_t X_t + \varepsilon_t, \quad \beta_t \sim \beta_{t-1} + \nu_t
+\]
+The Kalman filter updates $\hat{\beta}_t$ recursively.  
+Spread definition:
+\[
+S_t = Y_t - \hat{\beta}_t X_t
+\]
+
+\subsection{Spread Normalization}
+We standardize:
+\[
+Z_t = \frac{S_t - \mu_t}{\sigma_t}
+\]
+where $\mu_t, \sigma_t$ are estimated with exponential weighting.
+
+\subsection{Mean Reversion Speed}
+We model spread dynamics as an OU process:
+\[
+dS_t = \kappa(\theta - S_t)\,dt + \sigma\,dW_t
+\]
+$\kappa$ = speed of mean reversion.  
+Faster $\kappa$ implies quicker convergence, higher quality signals.
+
+\subsection{Conformal Prediction}
+On residuals $\varepsilon_t$, conformal scores generate prediction intervals:
+\[
+I_t = \Big[\, \hat{S}_t - q_{\alpha}, \; \hat{S}_t + q_{\alpha}\,\Big]
+\]
+- Narrow intervals $\Rightarrow$ high confidence.  
+- Wide intervals $\Rightarrow$ uncertainty, filter out trades.
+
+\section{Trading Rules}
+\begin{itemize}
+  \item Enter when $|Z_t| > 2$ \textbf{and} conformal interval is tight.
+  \item Exit when $Z_t \to 0$.
+  \item Position size scaled to liquidity (ADV) and capped by participation.
+  \item Risk controls: DV01 neutralization, sector/rating neutrality, stop-outs on volatility spikes.
+\end{itemize}
+
+\section{Workflow Diagram}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=1.8cm and 2.5cm,
+  box/.style={rectangle, draw, rounded corners, align=center, minimum width=3.5cm, minimum height=1cm}
+]
+\node[box] (A) {Data Ingestion \\ (Bonds, ETFs, CDX, intraday panels)};
+\node[box, below=of A] (B) {Pair Selection \\ (sector, rating, liquidity)};
+\node[box, below=of B] (C) {Cointegration Tests \\ (Engle--Granger, Johansen)};
+\node[box, below=of C] (D) {Kalman Filter \\ (dynamic $\beta_t$, spread $S_t$)};
+\node[box, below=of D] (E) {Spread Analysis \\ (Z-score, OU mean reversion)};
+\node[box, below=of E] (F) {Conformal Prediction \\ (confidence intervals)};
+\node[box, below=of F] (G) {Trade Signal \\ (entry/exit, sizing)};
+\node[box, below=of G] (H) {Execution \& Risk Mgmt \\ (DV01 hedge, neutrality)};
+
+\draw[-{Latex}] (A) -- (B);
+\draw[-{Latex}] (B) -- (C);
+\draw[-{Latex}] (C) -- (D);
+\draw[-{Latex}] (D) -- (E);
+\draw[-{Latex}] (E) -- (F);
+\draw[-{Latex}] (F) -- (G);
+\draw[-{Latex}] (G) -- (H);
+\end{tikzpicture}
+\end{center}
+
+\section*{Bottom Line}
+ETF and CDX flows drive temporary dislocations versus underlying bonds.  
+By selecting similar assets, testing for cointegration, applying a Kalman filter for dynamic hedge ratios, and filtering trades with conformal prediction, we build a robust framework to monetize mean reversion in credit markets.
+
+\end{document}
